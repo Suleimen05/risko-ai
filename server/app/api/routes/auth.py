@@ -4,7 +4,7 @@ Production-ready implementation with proper error handling and security.
 """
 import os
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from ...core.database import get_db
 from ...core.security import (
@@ -12,7 +12,8 @@ from ...core.security import (
     get_password_hash,
     create_access_token,
     create_refresh_token,
-    decode_token
+    decode_token,
+    token_blacklist,
 )
 from ...db.models import User, UserSettings, SubscriptionTier
 from ..schemas.auth import (
@@ -460,3 +461,18 @@ async def dev_upgrade_subscription(
         "credits": current_user.credits,
         "user": UserResponse.model_validate(current_user)
     }
+
+
+@router.post("/logout")
+async def logout(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+):
+    """Invalidate the current access token by adding its jti to the blacklist."""
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        payload = decode_token(token)
+        if payload and "jti" in payload:
+            token_blacklist.blacklist(payload["jti"], payload.get("exp", 0))
+    return {"message": "Logged out successfully"}

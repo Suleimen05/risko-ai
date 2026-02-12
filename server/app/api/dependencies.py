@@ -5,19 +5,18 @@ Enterprise-grade dependency injection with:
 - JWT token validation
 - Role-based access control (RBAC)
 - Subscription tier enforcement
-- Rate limiting per user/tier
+- Rate limiting per user/tier (in-memory + optional Redis)
 - Request context management
-
-Security Standards:
-- OWASP compliant token validation
-- Timing-safe comparisons
-- Proper error masking (no information leakage)
 """
+import os
 import time
 import hashlib
+import logging
 from datetime import datetime
 from typing import Optional, Dict, Any
 from collections import defaultdict
+
+_dep_logger = logging.getLogger(__name__)
 
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -68,10 +67,27 @@ class RateLimiter:
     }
 
     def __init__(self):
-        # {user_id: [(timestamp, count), ...]}
         self._requests: Dict[int, list] = defaultdict(list)
-        self._deep_analyze_daily: Dict[str, int] = defaultdict(int)  # "user_id:date" -> count
-        self._window_seconds = 60  # 1 minute window
+        self._deep_analyze_daily: Dict[str, int] = defaultdict(int)
+        self._window_seconds = 60
+        self._redis = None
+        self._redis_checked = False
+
+    def _get_redis(self):
+        if self._redis_checked:
+            return self._redis
+        self._redis_checked = True
+        redis_url = os.getenv("REDIS_URL", "")
+        if redis_url:
+            try:
+                import redis
+                self._redis = redis.from_url(redis_url, decode_responses=True)
+                self._redis.ping()
+                _dep_logger.info("RateLimiter: Using Redis backend")
+            except Exception as e:
+                _dep_logger.warning(f"RateLimiter: Redis unavailable ({e}), using in-memory")
+                self._redis = None
+        return self._redis
 
     def _clean_old_requests(self, user_id: int) -> None:
         """Remove requests older than the window."""
@@ -89,12 +105,23 @@ class RateLimiter:
     def check_rate_limit(self, user_id: int, tier: SubscriptionTier) -> None:
         """
         Check if user is within rate limits.
-
-        Raises:
-            HTTPException: 429 if rate limit exceeded
+        Uses Redis sorted sets if available, falls back to in-memory.
         """
         limit = self.TIER_LIMITS.get(tier, 10)
-        current = self._get_request_count(user_id)
+
+        r = self._get_redis()
+        if r:
+            key = f"rl:{user_id}"
+            now = time.time()
+            pipe = r.pipeline()
+            pipe.zremrangebyscore(key, 0, now - self._window_seconds)
+            pipe.zcard(key)
+            pipe.zadd(key, {str(now): now})
+            pipe.expire(key, self._window_seconds + 1)
+            results = pipe.execute()
+            current = results[1]
+        else:
+            current = self._get_request_count(user_id)
 
         if current >= limit:
             retry_after = self._window_seconds
@@ -111,8 +138,8 @@ class RateLimiter:
                 headers={"Retry-After": str(retry_after)}
             )
 
-        # Record this request
-        self._requests[user_id].append((time.time(), 1))
+        if not r:
+            self._requests[user_id].append((time.time(), 1))
 
     def check_deep_analyze_limit(self, user_id: int, tier: SubscriptionTier) -> None:
         """

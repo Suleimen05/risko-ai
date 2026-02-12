@@ -17,13 +17,17 @@ app = FastAPI(
     description="Machine Learning microservice for Risko.ai"
 )
 
-# CORS configuration
+# CORS — only allow requests from the backend server
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # В production укажите конкретные домены
+    allow_origins=[
+        os.getenv("BACKEND_URL", "http://localhost:8000"),
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Request/Response Models

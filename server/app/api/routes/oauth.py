@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from ...core.database import get_db
 from ...db.models import User, UserAccount, SocialPlatform
 from ..dependencies import get_current_user
+from ...core.encryption import encrypt_token
 
 router = APIRouter(tags=["OAuth"])
 
@@ -226,8 +227,8 @@ async def tiktok_callback(
     ).first()
 
     if existing:
-        existing.oauth_access_token = access_token
-        existing.oauth_refresh_token = refresh_token
+        existing.oauth_access_token = encrypt_token(access_token)
+        existing.oauth_refresh_token = encrypt_token(refresh_token)
         existing.oauth_token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
         existing.oauth_connected_at = datetime.utcnow()
         existing.is_verified = True
@@ -241,8 +242,8 @@ async def tiktok_callback(
             display_name=display_name,
             avatar_url=avatar_url,
             platform_user_id=open_id,
-            oauth_access_token=access_token,
-            oauth_refresh_token=refresh_token,
+            oauth_access_token=encrypt_token(access_token),
+            oauth_refresh_token=encrypt_token(refresh_token),
             oauth_token_expires_at=datetime.utcnow() + timedelta(seconds=expires_in),
             oauth_scope="user.info.basic,video.list",
             oauth_connected_at=datetime.utcnow(),
@@ -373,7 +374,7 @@ async def instagram_callback(
     ).first()
 
     if existing:
-        existing.oauth_access_token = access_token
+        existing.oauth_access_token = encrypt_token(access_token)
         existing.oauth_token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
         existing.oauth_connected_at = datetime.utcnow()
         existing.is_verified = True
@@ -384,7 +385,7 @@ async def instagram_callback(
             platform=SocialPlatform.INSTAGRAM,
             username=username,
             platform_user_id=ig_user_id,
-            oauth_access_token=access_token,
+            oauth_access_token=encrypt_token(access_token),
             oauth_token_expires_at=datetime.utcnow() + timedelta(seconds=expires_in),
             oauth_scope="user_profile,user_media",
             oauth_connected_at=datetime.utcnow(),
@@ -511,8 +512,8 @@ async def youtube_callback(
     ).first()
 
     if existing:
-        existing.oauth_access_token = access_token
-        existing.oauth_refresh_token = refresh_token
+        existing.oauth_access_token = encrypt_token(access_token)
+        existing.oauth_refresh_token = encrypt_token(refresh_token)
         existing.oauth_token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
         existing.oauth_connected_at = datetime.utcnow()
         existing.is_verified = True
@@ -526,8 +527,8 @@ async def youtube_callback(
             display_name=username,
             avatar_url=avatar_url,
             platform_user_id=channel_id,
-            oauth_access_token=access_token,
-            oauth_refresh_token=refresh_token,
+            oauth_access_token=encrypt_token(access_token),
+            oauth_refresh_token=encrypt_token(refresh_token),
             oauth_token_expires_at=datetime.utcnow() + timedelta(seconds=expires_in),
             oauth_scope="youtube.readonly",
             oauth_connected_at=datetime.utcnow(),
@@ -666,8 +667,8 @@ async def twitter_callback(
     ).first()
 
     if existing:
-        existing.oauth_access_token = access_token
-        existing.oauth_refresh_token = refresh_token
+        existing.oauth_access_token = encrypt_token(access_token)
+        existing.oauth_refresh_token = encrypt_token(refresh_token)
         existing.oauth_token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
         existing.oauth_connected_at = datetime.utcnow()
         existing.is_verified = True
@@ -682,8 +683,8 @@ async def twitter_callback(
             display_name=display_name,
             avatar_url=avatar_url,
             platform_user_id=twitter_user_id,
-            oauth_access_token=access_token,
-            oauth_refresh_token=refresh_token,
+            oauth_access_token=encrypt_token(access_token),
+            oauth_refresh_token=encrypt_token(refresh_token),
             oauth_token_expires_at=datetime.utcnow() + timedelta(seconds=expires_in),
             oauth_scope="tweet.read,users.read,offline.access",
             oauth_connected_at=datetime.utcnow(),

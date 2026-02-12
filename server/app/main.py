@@ -122,29 +122,36 @@ async def api_key_middleware(request: Request, call_next):
     return await call_next(request)
 
 
-# CORS - Production-ready configuration
-ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-    "https://rizko.ai",
-    "https://www.rizko.ai",
-    "https://app.rizko.ai",
-    # Add Cloudflare Pages domains
-    "https://*.pages.dev",
-]
+# CORS - Strict configuration
+def _get_allowed_origins() -> list:
+    """Build CORS allowed origins from environment."""
+    origins = [
+        "https://rizko.ai",
+        "https://www.rizko.ai",
+        "https://app.rizko.ai",
+    ]
+    extra = os.getenv("CORS_EXTRA_ORIGINS", "")
+    if extra:
+        origins.extend([o.strip() for o in extra.split(",") if o.strip()])
+    if os.getenv("ENVIRONMENT", "development") == "development":
+        origins.extend([
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:5174",
+        ])
+    return origins
 
-# For development, allow all origins
-if os.getenv("ENVIRONMENT", "development") == "development":
-    ALLOWED_ORIGINS = ["*"]
+ALLOWED_ORIGINS = _get_allowed_origins()
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
     expose_headers=["X-Request-ID", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
 )
 
@@ -275,6 +282,14 @@ app.include_router(
 async def startup_event():
     """Initialize services on startup."""
     logger.info("[STARTUP] Starting Rizko.ai Backend...")
+
+    # Validate SECRET_KEY
+    if settings.SECRET_KEY in ("change-this-in-production-please", "your-secret-key-here"):
+        if os.getenv("ENVIRONMENT") != "development":
+            logger.critical("FATAL: SECRET_KEY is set to default value in non-development environment!")
+            raise RuntimeError("SECRET_KEY must be changed for production")
+        else:
+            logger.warning("WARNING: Using default SECRET_KEY — only acceptable for development")
 
     # Start background scheduler for auto-rescan
     try:
