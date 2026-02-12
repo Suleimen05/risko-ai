@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: trendscout-db
+    environment:
+      POSTGRES_USER: trendscout
+      POSTGRES_PASSWORD: trendscout123
+      POSTGRES_DB: trendscout
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trendscout"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: trendscout-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: trendscout-server
+    environment:
+      DATABASE_URL: postgresql://trendscout:trendscout123@postgres:5432/trendscout
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      APIFY_API_KEY: ${APIFY_API_KEY}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./server:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: trendscout-ml
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      MODEL_PATH: /app/models
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./ml-service:/app
+      - ml_models:/app/models
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: trendscout-client
+    environment:
+      VITE_API_URL: http://localhost:8000
+      VITE_ML_API_URL: http://localhost:8001
+      VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+      - ml-service
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    command: npm run dev -- --host
+
+volumes:
+  postgres_data:
+  redis_data:
+  ml_models:

@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+
+# ML Models
+ml-service/models/*.pt
+ml-service/models/*.bin
+!ml-service/models/.gitkeep
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Docker
+.dockerignore
+
+# Claude Code
+.claude/
+
+# Windows artifacts
+nul
